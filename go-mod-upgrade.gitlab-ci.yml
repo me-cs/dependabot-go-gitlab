@@ -1,0 +1,222 @@
+go-dependency-upgrade:
+  stage: lint
+  tags:
+    - your_tags
+  rules:
+    - if: '$AUTO_UPGRADE == "true" && $CI_COMMIT_REF_NAME == "master"'
+  script:
+    # 设置严格模式，任何错误都会导致脚本终止
+    - set -e
+    - set -o pipefail
+    - set -u  # 检查未定义的变量
+
+    # 定义全局变量
+    - WORK_DIR="$CI_PROJECT_DIR/../go_mod_upgrade_work"
+    - DATE=$(date +%Y%m%d)
+    - BRANCH="go-mod-upgrade-$DATE"
+    - REPO_URL="your_repo_url"
+
+    # 定义日志函数，统一日志格式
+    - |
+      log_info() {
+        echo "🔵 [INFO] $1"
+      }
+      
+      log_warn() {
+        echo "⚠️ [WARN] $1"
+      }
+      
+      log_error() {
+        echo "🔴 [ERROR] $1"
+      }
+      
+      log_success() {
+        echo "✅ [SUCCESS] $1"
+      }
+
+    # 定义清理函数，确保环境始终干净（简化版）
+    - |
+      cleanup() {
+        log_info "开始清理工作环境..."
+        rm -rf "$WORK_DIR"
+        log_success "工作目录清理完成"
+      }
+      
+      # 注册清理函数，确保脚本退出时执行
+      trap cleanup EXIT
+
+    # 检查是否为工作日
+    - |
+      log_info "检查是否为工作日..."
+      current_date=$(date +%Y-%m-%d)
+      workday=$(curl -s -A "Mozilla/5.0" --max-time 10 --connect-timeout 5 "http://timor.tech/api/holiday/info/${current_date}" | jq -r '.type.type' 2>/dev/null || echo "error")
+      
+      if [[ "$workday" == "error" || -z "$workday" || "$workday" == "null" ]]; then
+        log_warn "工作日API请求失败，默认按工作日处理"
+      elif [[ "$workday" =~ ^[12]$ ]]; then
+        log_info "非工作日（${current_date}），跳过执行"
+        exit 0
+      else
+        log_success "工作日（${current_date}），继续执行依赖升级"
+      fi
+
+    # 初始化工作目录
+    - |
+      log_info "初始化全新工作目录..."
+      rm -rf "$WORK_DIR"
+      mkdir -p "$WORK_DIR"
+      cd "$WORK_DIR"
+      
+      # 克隆仓库（使用干净的克隆，避免历史问题）
+      log_info "克隆项目仓库..."
+      git clone --depth 1 "$REPO_URL" background
+      cd background
+      
+      # 验证当前分支
+      current_branch=$(git branch --show-current)
+      log_info "当前分支: $current_branch"
+      
+      # 确保在master分支上
+      if [ "$current_branch" != "master" ]; then
+        log_info "切换到master分支..."
+        git checkout master || git checkout -b master origin/master
+      fi
+      log_success "已在master分支"
+
+    # 检查并更新go-mod-upgrade工具
+    - |
+      log_info "检查go-mod-upgrade工具..."
+      if ! command -v go-mod-upgrade &> /dev/null; then
+        log_info "安装go-mod-upgrade..."
+        go install github.com/oligot/go-mod-upgrade@latest
+      else
+        CURRENT_VERSION=$(go-mod-upgrade --version 2>&1 | grep -oP 'v\d+\.\d+\.\d+')
+        LATEST_VERSION=$(curl -s --max-time 10 --connect-timeout 5 https://api.github.com/repos/oligot/go-mod-upgrade/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+      
+        log_info "当前版本: $CURRENT_VERSION"
+        log_info "最新版本: $LATEST_VERSION"
+      
+        if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
+          log_info "升级到最新版本..."
+          go install github.com/oligot/go-mod-upgrade@latest
+        else
+          log_success "已是最新版本"
+        fi
+      fi
+
+    # 执行依赖升级（简化分支管理）
+    - |
+      log_info "执行依赖升级..."
+      
+      # 记录当前依赖状态
+      go list -m -f '{{if not .Indirect}}{{.Path}}@{{.Version}}{{end}}' all > current_deps.txt
+      
+      # 升级依赖
+      log_info "运行go-mod-upgrade..."
+      go-mod-upgrade --ignore ignore_repo \
+                     -f
+      
+      # 整理依赖
+      go mod tidy
+      
+      # 检查文件是否有变更
+      if [[ $(git status --porcelain go.mod go.sum) ]]; then
+        log_info "检测到go.mod/go.sum变更，继续处理..."
+      
+        # 创建新分支（全新环境中无需删除旧分支）
+        log_info "创建新分支 $BRANCH..."
+        git checkout -b "$BRANCH"
+        log_success "已创建新分支 $BRANCH"
+      
+        # 获取升级后的依赖列表
+        go list -m -f '{{if not .Indirect}}{{.Path}}@{{.Version}}{{end}}' all > upgraded_deps.txt
+      
+        # 检查是否有直接依赖升级
+        if diff -q current_deps.txt upgraded_deps.txt > /dev/null; then
+          log_success "直接依赖没有变更，仅间接依赖升级，无需创建MR"
+          exit 0
+        fi
+      
+        # 获取升级的直接依赖模块
+        DIRECT_UPGRADED_MODULES=""
+        while read -r line; do
+          module=$(echo "$line" | cut -d'@' -f1)
+          old_version=$(echo "$line" | cut -d'@' -f2)
+          new_version=$(grep "^$module@" upgraded_deps.txt | cut -d'@' -f2)
+      
+          if [ "$old_version" != "$new_version" ]; then
+            DIRECT_UPGRADED_MODULES="$DIRECT_UPGRADED_MODULES $module"
+          fi
+        done < current_deps.txt
+      
+        # 生成变更报告（简化网络请求）
+        log_info "生成升级报告..."
+        echo -e "# Go依赖自动升级报告 ($DATE)\n\n升级的依赖库及变更说明：" > upgrade_report.md
+      
+        # 为每个直接升级的库获取release notes（优化超时）
+        for module in $DIRECT_UPGRADED_MODULES; do
+          echo -e "\n## \`$module\`" >> upgrade_report.md
+      
+          # 解析GitHub仓库信息
+          repo_path=$(echo "$module" | cut -d'/' -f2,3)
+          repo_owner=$(echo "$repo_path" | cut -d'/' -f1)
+          repo_name=$(echo "$repo_path" | cut -d'/' -f2)
+      
+          # 获取模块版本
+          current_version=$(grep "^$module@" current_deps.txt | cut -d'@' -f2)
+          new_version=$(grep "^$module@" upgraded_deps.txt | cut -d'@' -f2)
+          if [[ ! "$new_version" =~ ^v ]]; then new_version="v$new_version"; fi
+      
+          log_info "获取 $module $current_version -> $new_version 的变更..."
+      
+          # 简化的获取逻辑（单次请求，带超时）
+          fetch_with_timeout() {
+            local url=$1
+            local timeout=5
+            curl -s -H "User-Agent: go-dependency-upgrade" --max-time "$timeout" "$url" 2>/dev/null
+          }
+      
+          # 获取release notes
+          api_url="https://api.github.com/repos/$repo_owner/$repo_name/releases/tags/$new_version"
+          release_notes=$(fetch_with_timeout "$api_url" | jq -r '.body')
+      
+          if [ -n "$release_notes" ] && [ "$release_notes" != "null" ]; then
+            echo "$release_notes" >> upgrade_report.md
+            log_success "获取到发布说明"
+          else
+            echo "  - ⚠️ 未找到发布说明" >> upgrade_report.md
+            log_warn "未找到 $module 的发布说明"
+          fi
+        done
+      
+        # 提交变更
+        log_info "提交变更..."
+        git add go.mod go.sum
+        git commit -m "chore: 自动升级go.mod go.sum"
+      
+        # 推送分支（全新环境中无需处理旧分支）
+        log_info "推送分支到远程..."
+        git push origin "$BRANCH"
+      
+        # 创建Merge Request
+        log_info "创建合并请求..."
+        MR_DESC=$(cat upgrade_report.md)
+        MR_RESPONSE=$(curl --request POST \
+          --url "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests" \
+          --header "PRIVATE-TOKEN: token" \
+          --form "source_branch=$BRANCH" \
+          --form "target_branch=master" \
+          --form "title=Auto Dependency Upgrade: $DATE" \
+          --form "description=$MR_DESC")
+      
+        # 获取MR链接
+        MR_IID=$(echo "$MR_RESPONSE" | jq -r '.iid')
+        MR_URL="$CI_PROJECT_URL/merge_requests/$MR_IID"
+        log_success "依赖升级完成，MR已创建: $MR_URL"
+      
+        # 发送通知
+        curl -X POST "notify_addr" \
+          -d "🚀 依赖升级完成，MR: $MR_URL"
+      else
+        log_success "go.mod/go.sum 没有变更，无需升级"
+      fi
