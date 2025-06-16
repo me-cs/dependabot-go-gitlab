@@ -1,0 +1,1 @@
+# dependabot-go-gitlab
