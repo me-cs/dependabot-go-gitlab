@@ -45,6 +45,67 @@ go-dependency-upgrade:
       # 注册清理函数，确保脚本退出时执行
       trap cleanup EXIT
 
+    # 自动安装必要工具
+    - |
+      log_info "检查并安装必要工具..."
+      
+      # 检查并安装curl
+      if ! command -v curl &> /dev/null; then
+        log_info "安装curl..."
+        if command -v apt-get &> /dev/null; then
+          sudo apt-get update && sudo apt-get install -y curl
+        elif command -v yum &> /dev/null; then
+          sudo yum install -y curl
+        else
+          log_error "无法安装curl：未知的包管理器"
+          exit 1
+        fi
+      else
+        log_success "curl已安装"
+      fi
+      
+      # 检查并安装jq
+      if ! command -v jq &> /dev/null; then
+        log_info "安装jq..."
+        if command -v apt-get &> /dev/null; then
+          sudo apt-get update && sudo apt-get install -y jq
+        elif command -v yum &> /dev/null; then
+          sudo yum install -y jq
+        else
+          log_error "无法安装jq：未知的包管理器"
+          exit 1
+        fi
+      else
+        log_success "jq已安装"
+      fi
+      
+      # 检查并安装go
+      if ! command -v go &> /dev/null; then
+        log_error "未找到Go环境，请先安装Go"
+        exit 1
+      else
+        log_success "Go已安装，版本：$(go version)"
+      fi
+      
+      # 检查并安装go-mod-upgrade
+      if ! command -v go-mod-upgrade &> /dev/null; then
+        log_info "安装go-mod-upgrade..."
+        go install github.com/oligot/go-mod-upgrade@latest
+      else
+        CURRENT_VERSION=$(go-mod-upgrade --version 2>&1 | grep -oP 'v\d+\.\d+\.\d+')
+        LATEST_VERSION=$(curl -s --max-time 10 --connect-timeout 5 https://api.github.com/repos/oligot/go-mod-upgrade/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+      
+        log_info "当前go-mod-upgrade版本: $CURRENT_VERSION"
+        log_info "最新版本: $LATEST_VERSION"
+      
+        if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
+          log_info "升级go-mod-upgrade到最新版本..."
+          go install github.com/oligot/go-mod-upgrade@latest
+        else
+          log_success "go-mod-upgrade已是最新版本"
+        fi
+      fi
+
     # 检查是否为工作日
     - |
       log_info "检查是否为工作日..."
@@ -82,27 +143,6 @@ go-dependency-upgrade:
         git checkout master || git checkout -b master origin/master
       fi
       log_success "已在master分支"
-
-    # 检查并更新go-mod-upgrade工具
-    - |
-      log_info "检查go-mod-upgrade工具..."
-      if ! command -v go-mod-upgrade &> /dev/null; then
-        log_info "安装go-mod-upgrade..."
-        go install github.com/oligot/go-mod-upgrade@latest
-      else
-        CURRENT_VERSION=$(go-mod-upgrade --version 2>&1 | grep -oP 'v\d+\.\d+\.\d+')
-        LATEST_VERSION=$(curl -s --max-time 10 --connect-timeout 5 https://api.github.com/repos/oligot/go-mod-upgrade/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
-      
-        log_info "当前版本: $CURRENT_VERSION"
-        log_info "最新版本: $LATEST_VERSION"
-      
-        if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
-          log_info "升级到最新版本..."
-          go install github.com/oligot/go-mod-upgrade@latest
-        else
-          log_success "已是最新版本"
-        fi
-      fi
 
     # 执行依赖升级（简化分支管理）
     - |
