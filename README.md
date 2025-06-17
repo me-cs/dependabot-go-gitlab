@@ -1,6 +1,6 @@
 # dependabot-go-gitlab
 
-一个类似 Dependabot 的 Go 模块依赖自动升级工具，专为 GitLab CI 设计，支持依赖检测、版本升级和合并请求自动化创建。
+一个类似 Dependabot 的 Go 模块依赖自动升级工具，专为私有化部署的 GitLab CI 设计，支持依赖检测、版本升级和合并请求自动化创建。
 
 ## 🤖 为什么使用 dependabot-go-gitlab？
 
