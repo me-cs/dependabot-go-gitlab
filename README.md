@@ -1,9 +1,9 @@
 ```markdown
-# dependabot-go-mod
+# dependabot-go-gitlab
 
 一个类似 Dependabot 的 Go 模块依赖自动升级工具，专为 GitLab CI 设计，支持依赖检测、版本升级和合并请求自动化创建。
 
-## 🤖 为什么使用 dependabot-go-mod？
+## 🤖 为什么使用 dependabot-go-gitlab？
 
 Dependabot 是流行的依赖自动化管理工具，但不支持 http 部署的私有化 GitLab 以及无法突破 GFW 封锁。`dependabot-go-mod` 填补了这一空白，提供：
 
@@ -17,9 +17,6 @@ Dependabot 是流行的依赖自动化管理工具，但不支持 http 部署的
 ### 1. 安装依赖
 
 ```bash
-# 安装 go-mod-upgrade 工具
-go install github.com/oligot/go-mod-upgrade@latest
-
 # 确保系统工具可用（选择对应系统）
 sudo apt-get install curl jq  # Debian/Ubuntu
 sudo yum install curl jq      # CentOS/RHEL
@@ -27,28 +24,19 @@ sudo yum install curl jq      # CentOS/RHEL
 
 ### 2. 在 GitLab CI 中配置
 
-在项目的 `.gitlab-ci.yml` 添加：
-
-```yaml
-dependabot-go-mod:  
-  stage: dependabot  
-  tags:  
-    - runner_shell  
-  rules:  
-    - if: '$AUTO_UPGRADE == "true" && $CI_COMMIT_REF_NAME == "master"'  
-  script:  
-    - curl -sL https://github.com/your-username/dependabot-go-mod/raw/main/dependabot-go-mod.sh | bash  
-```
+在项目的 `.gitlab-ci/ci` 目录添加：go-mod-upgrade.gitlab-ci.yml 文件
 
 ### 3. 配置环境变量
 
 在 GitLab 项目设置中添加以下环境变量：
-
-```
-AUTO_UPGRADE=true             # 启用自动升级
-CI_API_V4_URL=https://gitlab.com/api/v4  # GitLab API地址
-PRIVATE_TOKEN=glpat-xxx        # 项目访问令牌
-```
+| 变量名            | 描述                     | 示例值                          |
+|-------------------|--------------------------|---------------------------------|
+| `AUTO_UPGRADE`    | 启用自动升级              | `true`                          |
+| `PRIVATE_TOKEN`   | 项目访问令牌              | `glpat-xxx`                     |
+| `IGNORED_MODULES` | 忽略的模块（逗号分隔）    | `github.com/casbin/casbin/v2`   |
+| `MR_TITLE_PREFIX` | MR 标题前缀               | `[dependabot]`                 |
+| `NOTIFICATION_URL`| 通知 API 地址             | `http://通知服务地址`           |
+| `DINGTALK_WEBHOOK`| 钉钉通知 API 地址         | `http://通知服务地址`           |
 
 ## 🧰 功能特性
 
@@ -66,28 +54,6 @@ PRIVATE_TOKEN=glpat-xxx        # 项目访问令牌
 - ✅ 工作日检测（通过 timor.tech API）
 - ✅ 仅在直接依赖变更时创建 MR
 - ✅ 自动跳过无变更的升级周期
-
-## 📋 配置选项
-
-### 环境变量
-| 变量名            | 描述                     | 示例值                          |
-|-------------------|--------------------------|---------------------------------|
-| `AUTO_UPGRADE`    | 启用自动升级             | `true`                          |
-| `IGNORED_MODULES` | 忽略的模块（逗号分隔）   | `github.com/casbin/casbin/v2`   |
-| `MR_TITLE_PREFIX` | MR 标题前缀              | `[dependabot]`                  |
-| `NOTIFICATION_URL`| 通知 API 地址            | `http://通知服务地址`           |
-
-### 脚本内配置
-修改 `dependabot-go-mod.sh` 中的配置：
-
-```bash
-# 忽略模块列表（可添加/删除）
---ignore github.com/casbin/casbin/v2 \
---ignore github.com/huaweicloud/huaweicloud-sdk-go-v3 \
-
-# 工作日检测 API（可替换为其他服务）
-"http://timor.tech/api/holiday/info/${current_date}"
-```
 
 ## 📈 执行流程
 
