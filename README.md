@@ -4,7 +4,7 @@
 
 ## 🤖 为什么使用 dependabot-go-gitlab？
 
-Dependabot 是流行的依赖自动化管理工具，但不支持 http 部署的私有化 GitLab 以及无法突破 GFW 封锁。`dependabot-go-mod` 填补了这一空白，提供：
+Dependabot 是流行的依赖自动化管理工具，但不支持 http 部署的私有化 GitLab 以及无法突破 GFW 封锁。`dependabot-go-gitlab` 填补了这一空白，提供：
 
 - **Go 模块专属支持**：基于 `go mod` 和 `go-mod-upgrade` 深度集成
 - **GitLab CI 原生适配**：自动创建 MR 并生成详细升级报告
@@ -16,6 +16,9 @@ Dependabot 是流行的依赖自动化管理工具，但不支持 http 部署的
 ### 1. 安装依赖
 
 ```bash
+# 安装 go-mod-upgrade 工具
+go install github.com/oligot/go-mod-upgrade@latest
+
 # 确保系统工具可用（选择对应系统）
 sudo apt-get install curl jq  # Debian/Ubuntu
 sudo yum install curl jq      # CentOS/RHEL
@@ -23,24 +26,45 @@ sudo yum install curl jq      # CentOS/RHEL
 
 ### 2. 在 GitLab CI 中配置
 
-在项目的 `.gitlab-ci/ci` 目录添加：go-mod-upgrade.gitlab-ci.yml 文件
-指定runner的tags，若需要的话  
-```bash
+在项目的 `.gitlab-ci/ci` 目录添加：`go-mod-upgrade.gitlab-ci.yml` 文件
+指定runner的tags，若需要的话：
+
+```yaml
 tags:
     - your_tags
 ```
 
-### 3. 配置pipeline_schedules 环境变量
+### 3. 配置 Pipeline Schedules 环境变量
 
-在 GitLab 项目pipeline_schedules设置中设置Interval Pattern并添加以下环境变量：
-| 变量名            | 描述                     | 示例值                          |
-|-------------------|--------------------------|---------------------------------|
-| `AUTO_UPGRADE`    | 启用自动升级              | `true`                          |
-| `PRIVATE_TOKEN`   | 项目访问令牌              | `glpat-xxx`                     |
-| `IGNORED_MODULES` | 忽略的模块（逗号分隔）    | `github.com/casbin/casbin/v2`   |
-| `MR_TITLE_PREFIX` | MR 标题前缀               | `[dependabot]`                 |
-| `NOTIFICATION_URL`| 通知 API 地址             | `http://通知服务地址`           |
-| `DINGTALK_WEBHOOK`| 钉钉通知 API 地址         | `http://通知服务地址`           |
+在 GitLab 项目 **Settings > CI/CD > Schedules** 中：
+1. **创建新的定时任务**：
+   - **Description**：自定义名称（如 `每周依赖升级`）
+   - **Interval pattern**：设置执行频率（如 `0 10 * * 1-5` 表示工作日 10:00）
+   - **Target branch**：选择 `master` 或你的主分支
+
+2. **添加环境变量**：
+   | 变量名            | 描述                     | 示例值                          |
+   |-------------------|--------------------------|---------------------------------|
+   | `AUTO_UPGRADE`    | 启用自动升级             | `true`                          |
+   | `PRIVATE_TOKEN`   | 项目访问令牌（需 `api` 和 `write_repository` 权限） | `glpat-xxx`                     |
+   | `IGNORED_MODULES` | 忽略的模块（逗号分隔）   | `github.com/casbin/casbin/v2`   |
+   | `MR_TITLE_PREFIX` | MR 标题前缀              | `[dependabot]`                  |
+   | `NOTIFICATION_URL`| 通知 API 地址            | `http://通知服务地址`           |
+   | `DINGTALK_WEBHOOK`| 钉钉通知 API 地址         | `https://oapi.dingtalk.com/robot/send?access_token=xxx` |
+
+### 🔐 **GitLab 访问令牌配置**
+1. **生成个人访问令牌**：
+   - 访问 **User Settings > Access Tokens**
+   - 填写名称（如 `dependabot-token`）
+   - 勾选权限：
+     - `api`（必须，用于创建 MR）
+     - `write_repository`（必须，用于推送新分支）
+   - 点击 **Create personal access token**，**立即复制**生成的令牌
+
+2. **添加到项目变量**：
+   - 进入 **Settings > CI/CD > Variables**
+   - 添加变量 `PRIVATE_TOKEN`，值为生成的令牌（勾选 **Mask variable** 隐藏敏感信息）
+
 
 ## 🧰 功能特性
 
@@ -59,6 +83,7 @@ tags:
 - ✅ 仅在直接依赖变更时创建 MR
 - ✅ 自动跳过无变更的升级周期
 
+
 ## 📈 执行流程
 
 ```mermaid
@@ -75,6 +100,7 @@ graph TD
     I --> J[发送升级通知]
     J --> K[执行完成]
 ```
+
 
 ## 🛠️ 自定义扩展
 
@@ -96,9 +122,64 @@ if [ -n "$DINGTALK_WEBHOOK" ]; then
 fi
 ```
 
+
+## 🚧 **常见问题解答**
+
+### ❓ **执行失败提示 `403 Forbidden`**
+- **原因**：`PRIVATE_TOKEN` 权限不足或已过期
+- **解决**：
+  1. 检查令牌是否包含 `api` 和 `write_repository` 权限
+  2. 重新生成令牌并更新项目变量
+
+### ❓ **MR 未自动创建**
+- **原因**：
+  - `AUTO_UPGRADE` 未设置为 `true`
+  - 依赖无变更
+  - API 地址配置错误（如私有部署的 `CI_API_V4_URL`）
+- **解决**：
+  1. 确认环境变量配置正确
+  2. 手动触发 Pipeline 查看日志
+
+### ❓ **如何测试配置是否正确？**
+- 临时将 `AUTO_UPGRADE` 设置为 `true`
+- 手动触发 Pipeline 执行（无需等待定时任务）
+
+
 ## 📄 许可证
-MIT License © 2025 dependabot-go-mod contributors
+MIT License © 2025 dependabot-go-gitlab contributors
 
 ## 👥 社区与支持
-- 🐛 [提交 Issue](https://github.com/your-username/dependabot-go-mod/issues)
+- 🐛 [提交 Issue](https://github.com/your-username/dependabot-go-gitlab/issues)
 - 🌟 欢迎 Star 和 Fork，共同完善 Go 依赖自动化管理！
+
+
+### 🔍 **完整示例配置**
+```yaml
+go-dependency-upgrade:
+  stage: dependabot
+  tags:
+    - your_runner_tags  # 替换为你的 runner 标签
+  rules:
+    - if: '$AUTO_UPGRADE == "true" && $CI_COMMIT_REF_NAME == "master"'
+  script:
+    - |
+      # 完整依赖升级脚本（自动从 GitHub 获取）
+      curl -sL https://github.com/your-username/dependabot-go-gitlab/raw/main/dependabot-go-mod.sh | bash
+```
+
+
+## 🔧 **配置文件说明**
+### `go-mod-upgrade.gitlab-ci.yml`
+```yaml
+dependabot-go-mod:
+  stage: dependabot
+  tags:
+    - runner_shell  # 指定你的 runner 标签
+  rules:
+    - if: '$AUTO_UPGRADE == "true" && $CI_COMMIT_REF_NAME == "master"'
+  script:
+    - curl -sL https://github.com/your-username/dependabot-go-gitlab/raw/main/dependabot-go-mod.sh | bash
+```
+
+
+这个合并后的版本保留了您原始 README 的核心内容，同时补充了令牌配置、定时任务设置、常见问题解答等新手友好的信息，使整个文档更加完整和易于理解。
