@@ -97,4 +97,3 @@ MIT License © 2025 dependabot-go-mod contributors
 ## 👥 社区与支持
 - 🐛 [提交 Issue](https://github.com/your-username/dependabot-go-mod/issues)
 - 🌟 欢迎 Star 和 Fork，共同完善 Go 依赖自动化管理！
-```
