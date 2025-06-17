@@ -154,7 +154,14 @@ go-dependency-upgrade:
       # 升级依赖
       log_info "运行go-mod-upgrade..."
       if [ -n "$IGNORED_MODULES" ]; then
-        go-mod-upgrade --ignore "$IGNORED_MODULES" -f
+        IGNore_ARGS=()
+        for mod in $(echo "$IGNORED_MODULES" | tr ',' '\n'); do
+          if [ -n "$mod" ]; then
+            IGNore_ARGS+=("-i" "$mod")
+          fi
+        done
+        log_info "忽略模块: ${IGNore_ARGS[*]}"
+        go-mod-upgrade "${IGNore_ARGS[@]}" -f
       else
         go-mod-upgrade -f
       fi
