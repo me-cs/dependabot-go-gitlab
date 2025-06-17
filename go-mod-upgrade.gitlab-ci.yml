@@ -14,7 +14,7 @@ go-dependency-upgrade:
     - WORK_DIR="$CI_PROJECT_DIR/../go_mod_upgrade_work"
     - DATE=$(date +%Y%m%d)
     - BRANCH="go-mod-upgrade-$DATE"
-    - REPO_URL="your_repo_url"
+    - REPO_URL="$CI_PROJECT_URL"
 
     # 定义日志函数，统一日志格式
     - |
@@ -113,8 +113,11 @@ go-dependency-upgrade:
       
       # 升级依赖
       log_info "运行go-mod-upgrade..."
-      go-mod-upgrade --ignore ignore_repo \
-                     -f
+      if [ -n "$IGNORED_MODULES" ]; then
+        go-mod-upgrade --ignore "$IGNORED_MODULES" -f
+      else
+        go-mod-upgrade -f
+      fi
       
       # 整理依赖
       go mod tidy
@@ -203,10 +206,10 @@ go-dependency-upgrade:
         MR_DESC=$(cat upgrade_report.md)
         MR_RESPONSE=$(curl --request POST \
           --url "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests" \
-          --header "PRIVATE-TOKEN: token" \
+          --header "PRIVATE-TOKEN: $PRIVATE_TOKEN" \
           --form "source_branch=$BRANCH" \
           --form "target_branch=master" \
-          --form "title=Auto Dependency Upgrade: $DATE" \
+          --form "title=$MR_TITLE_PREFIX Auto Dependency Upgrade: $DATE" \
           --form "description=$MR_DESC")
       
         # 获取MR链接
@@ -215,8 +218,15 @@ go-dependency-upgrade:
         log_success "依赖升级完成，MR已创建: $MR_URL"
       
         # 发送通知
-        curl -X POST "notify_addr" \
-          -d "🚀 依赖升级完成，MR: $MR_URL"
+        if [ -n "$NOTIFICATION_URL" ]; then
+          curl -X POST "$NOTIFICATION_URL" \
+            -d "🚀 依赖升级完成，MR: $MR_URL"
+        fi
+        if [ -n "$DINGTALK_WEBHOOK" ]; then  
+          curl -X POST "$DINGTALK_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d '{"msgtype":"text","text":{"content":"🚀 依赖升级完成，MR: '$MR_URL'"}}'  
+        fi
       else
         log_success "go.mod/go.sum 没有变更，无需升级"
       fi
