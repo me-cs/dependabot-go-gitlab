@@ -28,9 +28,9 @@ sudo yum install curl jq      # CentOS/RHEL
 tags:
     - your_tags
 
-### 3. 配置环境变量
+### 3. 配置pipeline_schedules 环境变量
 
-在 GitLab 项目设置中添加以下环境变量：
+在 GitLab 项目pipeline_schedules设置中设置Interval Pattern并添加以下环境变量：
 | 变量名            | 描述                     | 示例值                          |
 |-------------------|--------------------------|---------------------------------|
 | `AUTO_UPGRADE`    | 启用自动升级              | `true`                          |
