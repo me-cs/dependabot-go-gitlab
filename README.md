@@ -24,6 +24,9 @@ sudo yum install curl jq      # CentOS/RHEL
 ### 2. 在 GitLab CI 中配置
 
 在项目的 `.gitlab-ci/ci` 目录添加：go-mod-upgrade.gitlab-ci.yml 文件
+指定runner的tags，若需要的话
+tags:
+    - your_tags
 
 ### 3. 配置环境变量
 
