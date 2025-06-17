@@ -13,18 +13,7 @@ Dependabot 是流行的依赖自动化管理工具，但不支持 http 部署的
 
 ## 🚀 快速开始
 
-### 1. 安装依赖
-
-```bash
-# 安装 go-mod-upgrade 工具
-go install github.com/oligot/go-mod-upgrade@latest
-
-# 确保系统工具可用（选择对应系统）
-sudo apt-get install curl jq  # Debian/Ubuntu
-sudo yum install curl jq      # CentOS/RHEL
-```
-
-### 2. 在 GitLab CI 中配置
+### 1. 在 GitLab CI 中配置
 
 在项目的 `.gitlab-ci/ci` 目录添加：`go-mod-upgrade.gitlab-ci.yml` 文件
 指定runner的tags，若需要的话：
@@ -34,7 +23,7 @@ tags:
     - your_tags
 ```
 
-### 3. 配置 Pipeline Schedules 环境变量
+### 2. 配置 Pipeline Schedules 环境变量
 
 在 GitLab 项目 **Settings > CI/CD > Schedules** 中：
 1. **创建新的定时任务**：
