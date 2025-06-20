@@ -190,10 +190,19 @@ go-dependency-upgrade:
         # 获取升级的直接依赖模块
         DIRECT_UPGRADED_MODULES=""
         while read -r line; do
+          if [[ -z "$line" ]]; then 
+            continue; 
+          fi
           module=$(echo "$line" | cut -d'@' -f1)
-          old_version=$(echo "$line" | cut -d'@' -f2)
-          new_version=$(grep "^$module@" upgraded_deps.txt | cut -d'@' -f2)
-      
+          old_version=$(echo "$line" | cut -d'@' -f2 || true)
+          new_version=$(grep "^$module@" upgraded_deps.txt | cut -d'@' -f2 || true)
+  
+          # 容错：版本为空时跳过（避免循环异常）
+          if [[ -z "$old_version" || -z "$new_version" ]]; then
+            log_warn "跳过格式异常的依赖行: $line"
+            continue
+          fi
+  
           if [ "$old_version" != "$new_version" ]; then
             DIRECT_UPGRADED_MODULES="$DIRECT_UPGRADED_MODULES $module"
           fi
